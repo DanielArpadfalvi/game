@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rift Dodge — Skillshot Aréna</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="game"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="hud-stat">
+          <span class="hud-label">PONTSZÁM</span>
+          <span id="score" class="hud-value">0</span>
+        </div>
+        <div class="hud-stat">
+          <span class="hud-label">HULLÁM</span>
+          <span id="wave" class="hud-value">1</span>
+        </div>
+        <div class="hud-stat">
+          <span class="hud-label">LEGJOBB</span>
+          <span id="best" class="hud-value">0</span>
+        </div>
+      </div>
+
+      <div class="hud-bottom">
+        <div id="hpbar-wrap">
+          <div id="hpbar"></div>
+          <span id="hptext">100 / 100</span>
+        </div>
+        <div class="abilities">
+          <div class="ability" id="ab-basic">
+            <span class="ab-key">◱</span>
+            <span class="ab-name">Alaptám.</span>
+            <div class="ab-cd"></div>
+          </div>
+          <div class="ability" id="ab-ability">
+            <span class="ab-key">E</span>
+            <span class="ab-name">Skill</span>
+            <div class="ab-cd"></div>
+          </div>
+          <div class="ability" id="ab-flash">
+            <span class="ab-key">F</span>
+            <span class="ab-name">Flash</span>
+            <div class="ab-cd"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Start screen -->
+    <div id="start-screen" class="overlay">
+      <div class="panel">
+        <h1>RIFT DODGE</h1>
+        <p class="subtitle">Skillshot Aréna — <span class="accent">Howling Abyss</span></p>
+        <div class="controls">
+          <div class="ctrl-row"><span class="key">Jobb klikk</span><span>Mozgás a kattintott pontra</span></div>
+          <div class="ctrl-row"><span class="key">Bal klikk</span><span>Alaptámadás a kurzor felé</span></div>
+          <div class="ctrl-row"><span class="key">Hős-skill</span><span>Ezreal: E · Vayne: Q</span></div>
+          <div class="ctrl-row"><span class="key">F</span><span>Flash — villanás a kurzor irányába</span></div>
+        </div>
+        <p class="hint">Öt ellenséges bajnok (Ezreal, Ryze, Ziggs, Ashe, Lux) lő rád jellegzetes skillshotokkal. Térj ki előlük, és lődd le őket pontokért!</p>
+        <button id="start-btn" class="btn">HŐSVÁLASZTÁS</button>
+      </div>
+    </div>
+
+    <!-- Champion select -->
+    <div id="select-screen" class="overlay hidden">
+      <div class="panel wide">
+        <h1>VÁLASSZ HŐST</h1>
+        <p class="subtitle">Mindegyik hőshöz jár egy egyedi <span class="accent">képesség</span> a mozgás és a Flash mellé</p>
+        <div class="champ-grid">
+          <button class="champ-card" data-champ="ezreal">
+            <div class="champ-portrait" id="portrait-ezreal"></div>
+            <div class="champ-name">EZREAL</div>
+            <div class="champ-role">Kaland-felfedező</div>
+            <div class="champ-ability">
+              <span class="champ-key">E</span>
+              <div>
+                <div class="ability-title">Arcane Shift</div>
+                <div class="ability-desc">Villanás a kurzor irányába, majd célkövető nyíl a legközelebbi ellenségre.</div>
+              </div>
+            </div>
+          </button>
+          <button class="champ-card" data-champ="vayne">
+            <div class="champ-portrait" id="portrait-vayne"></div>
+            <div class="champ-name">VAYNE</div>
+            <div class="champ-role">Éjvadász</div>
+            <div class="champ-ability">
+              <span class="champ-key">Q</span>
+              <div>
+                <div class="ability-title">Tumble</div>
+                <div class="ability-desc">Gyors gurulás a kurzor irányába — rövid cooldown, kiváló kitéréshez.</div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game over screen -->
+    <div id="over-screen" class="overlay hidden">
+      <div class="panel">
+        <h1 class="defeat">LEGYŐZTEK</h1>
+        <p class="subtitle">Túlélted: <span id="final-time" class="accent">0.0 mp</span></p>
+        <div class="result-grid">
+          <div><span class="res-label">Pontszám</span><span id="final-score" class="res-value">0</span></div>
+          <div><span class="res-label">Legjobb</span><span id="final-best" class="res-value">0</span></div>
+          <div><span class="res-label">Kilövések</span><span id="final-kills" class="res-value">0</span></div>
+        </div>
+        <div class="over-btns">
+          <button id="retry-btn" class="btn">ÚJRA (ugyanaz a hős)</button>
+          <button id="change-btn" class="btn ghost">HŐSVÁLTÁS</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/game.js"></script>
+</body>
+</html>

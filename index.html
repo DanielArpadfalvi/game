@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rift Dodge — Skillshot Aréna</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="game"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="hud-stat">
+          <span class="hud-label">PONTSZÁM</span>
+          <span id="score" class="hud-value">0</span>
+        </div>
+        <div class="hud-stat">
+          <span class="hud-label">HULLÁM</span>
+          <span id="wave" class="hud-value">1</span>
+        </div>
+        <div class="hud-stat">
+          <span class="hud-label">LEGJOBB</span>
+          <span id="best" class="hud-value">0</span>
+        </div>
+      </div>
+
+      <div class="hud-bottom">
+        <div id="hpbar-wrap">
+          <div id="hpbar"></div>
+          <span id="hptext">100 / 100</span>
+        </div>
+        <div class="abilities">
+          <div class="ability" id="ab-q">
+            <span class="ab-key">◱</span>
+            <span class="ab-name">Villám</span>
+            <div class="ab-cd"></div>
+          </div>
+          <div class="ability" id="ab-flash">
+            <span class="ab-key">F</span>
+            <span class="ab-name">Flash</span>
+            <div class="ab-cd"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Start screen -->
+    <div id="start-screen" class="overlay">
+      <div class="panel">
+        <h1>RIFT DODGE</h1>
+        <p class="subtitle">Skillshot Aréna — <span class="accent">prototípus</span></p>
+        <div class="controls">
+          <div class="ctrl-row"><span class="key">Jobb klikk</span><span>Mozgás a kattintott pontra</span></div>
+          <div class="ctrl-row"><span class="key">Bal klikk</span><span>Villám lövése a kurzor felé</span></div>
+          <div class="ctrl-row"><span class="key">F</span><span>Flash — villanás a kurzor irányába</span></div>
+        </div>
+        <p class="hint">Térj ki a feléd repülő skillshotok elől. A piros jelzés (telegraph) mutatja, hova csapódik be. Lődd le a varázslókat pontokért!</p>
+        <button id="start-btn" class="btn">JÁTÉK INDÍTÁSA</button>
+      </div>
+    </div>
+
+    <!-- Game over screen -->
+    <div id="over-screen" class="overlay hidden">
+      <div class="panel">
+        <h1 class="defeat">LEGYŐZTEK</h1>
+        <p class="subtitle">Túlélted: <span id="final-time" class="accent">0.0 mp</span></p>
+        <div class="result-grid">
+          <div><span class="res-label">Pontszám</span><span id="final-score" class="res-value">0</span></div>
+          <div><span class="res-label">Legjobb</span><span id="final-best" class="res-value">0</span></div>
+          <div><span class="res-label">Kilövések</span><span id="final-kills" class="res-value">0</span></div>
+        </div>
+        <button id="retry-btn" class="btn">ÚJRA</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/game.js"></script>
+</body>
+</html>

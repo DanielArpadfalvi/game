@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { WinterBackground } from "../bg";
 import { ATTACKERS, CHAMPIONS, CONFIG, AttackerDef, ChampionDef } from "../data";
 import { button, css } from "../helpers";
+import { audio } from "../audio";
 
 interface Enemy {
   obj: Phaser.GameObjects.Image;
@@ -9,6 +10,8 @@ interface Enemy {
   def: AttackerDef;
   x: number; y: number;
   fireTimer: number;
+  ultTimer: number;
+  ulter: boolean;
   drift: number;
   spawnT: number;
   castT: number;
@@ -26,14 +29,15 @@ interface Shot {
 }
 
 interface Telegraph {
-  kind: "line" | "circle";
+  kind: "line" | "circle" | "beam";
   x: number; y: number; ang: number;
   width: number; length: number; radius: number;
   warn: number; t: number; dmg: number; color: number; style: string;
-  done: boolean;
+  mega: boolean; done: boolean;
 }
 
-interface Lob { sx: number; sy: number; tx: number; ty: number; t: number; dur: number; }
+interface Beam { x: number; y: number; ang: number; width: number; length: number; t: number; dur: number; dmg: number; color: number; damaged: boolean; }
+interface Lob { sx: number; sy: number; tx: number; ty: number; t: number; dur: number; mega: boolean; }
 interface Particle { x: number; y: number; vx: number; vy: number; r: number; t: number; dur: number; color: number; ring: boolean; maxR: number; }
 
 export class GameScene extends Phaser.Scene {
@@ -52,17 +56,18 @@ export class GameScene extends Phaser.Scene {
   private enemyShots: Shot[] = [];
   private playerShots: Shot[] = [];
   private telegraphs: Telegraph[] = [];
+  private beams: Beam[] = [];
   private lobs: Lob[] = [];
   private particles: Particle[] = [];
 
   private gfxTele!: Phaser.GameObjects.Graphics;
   private gfxFx!: Phaser.GameObjects.Graphics;
+  private gfxAdd!: Phaser.GameObjects.Graphics;
 
   private elapsed = 0; private score = 0; private wave = 1; private kills = 0;
   private difficulty = 1; private spawnTimer = 0.7; private waveTimer = 0; private spawnIndex = 0;
   private over = false;
 
-  // publikus, hogy a UIScene olvashassa
   public getStats() {
     return {
       score: this.score, wave: this.wave, best: this.registry.get("best") as number,
@@ -90,6 +95,7 @@ export class GameScene extends Phaser.Scene {
     this.gfxTele = this.add.graphics().setDepth(1);
     this.hero = this.add.image(this.px, this.py, `hero_${this.champ.key}`).setDisplaySize(44, 44).setDepth(6);
     this.gfxFx = this.add.graphics().setDepth(8);
+    this.gfxAdd = this.add.graphics().setDepth(7).setBlendMode(Phaser.BlendModes.ADD);
 
     this.setupInput();
 
@@ -101,7 +107,7 @@ export class GameScene extends Phaser.Scene {
 
   private resetState(): void {
     this.enemies = []; this.enemyShots = []; this.playerShots = [];
-    this.telegraphs = []; this.lobs = []; this.particles = []; this.ghosts = [];
+    this.telegraphs = []; this.beams = []; this.lobs = []; this.particles = []; this.ghosts = [];
     this.hp = CONFIG.maxHp; this.flashCd = 0; this.basicCd = 0; this.abilityCd = 0;
     this.invuln = 0; this.hitFlash = 0; this.dash = null;
     this.elapsed = 0; this.score = 0; this.wave = 1; this.kills = 0;
@@ -112,6 +118,7 @@ export class GameScene extends Phaser.Scene {
   private setupInput(): void {
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      audio.ensure();
       if (this.over) return;
       if (p.rightButtonDown()) {
         this.tx = Phaser.Math.Clamp(p.worldX, 0, this.scale.width);
@@ -122,6 +129,11 @@ export class GameScene extends Phaser.Scene {
       }
     });
     const kb = this.input.keyboard!;
+    kb.on("keydown", () => audio.ensure());
+    kb.on("keydown-M", () => {
+      const muted = audio.toggleMute();
+      this.floatText(this.px, this.py - 34, muted ? "🔇 Hang ki" : "🔊 Hang be", "#c8aa6e");
+    });
     kb.on("keydown-F", () => !this.over && this.castFlash());
     kb.on("keydown-" + this.champ.abilityKey.toUpperCase(), () => {
       if (this.over) return;
@@ -130,7 +142,6 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  // ---------------- Bemenet / képességek ----------------
   private pointer(): Phaser.Input.Pointer { return this.input.activePointer; }
 
   private castBasic(p: Phaser.Input.Pointer): void {
@@ -139,18 +150,21 @@ export class GameScene extends Phaser.Scene {
     const ang = Math.atan2(p.worldY - this.py, p.worldX - this.px);
     this.facing = ang;
     this.spawnPlayerShot(ang, false, null);
+    audio.basic();
   }
 
   private castFlash(): void {
     if (this.flashCd > 0) return;
     this.flashCd = CONFIG.flashCd;
     this.blink(CONFIG.flashRange, 0xc9e8ff);
+    audio.flash();
   }
 
   private castArcaneShift(): void {
     if (this.abilityCd > 0) return;
     this.abilityCd = this.champ.abilityCd;
     this.blink(400, 0xffe07a);
+    audio.ezrealShift();
     const t = this.nearestEnemy();
     if (t) {
       const ang = Math.atan2(t.y - this.py, t.x - this.px);
@@ -169,6 +183,7 @@ export class GameScene extends Phaser.Scene {
     this.dash = { fx: this.px, fy: this.py, tx: nx, ty: ny, t: 0, dur: 0.16 };
     this.invuln = Math.max(this.invuln, 0.16);
     this.facing = ang;
+    audio.tumble();
   }
 
   private blink(range: number, color: number): void {
@@ -218,18 +233,25 @@ export class GameScene extends Phaser.Scene {
 
     const def = ATTACKERS[this.spawnIndex % ATTACKERS.length];
     this.spawnIndex++;
+    const ulter = def.key === "lux" || def.key === "ziggs";
 
     const obj = this.add.image(x, y, `token_${def.key}`).setDisplaySize(52, 52).setDepth(5).setScale(0.01);
     const label = this.add
       .text(x, y - 40, def.name, { fontFamily: "Trebuchet MS, sans-serif", fontSize: "12px", color: "#cfe3ff" })
-      .setOrigin(0.5)
-      .setDepth(5)
-      .setAlpha(0.7);
-    this.enemies.push({ obj, label, def, x, y, fireTimer: Phaser.Math.FloatBetween(1.0, 2.2), drift: Phaser.Math.FloatBetween(-1, 1), spawnT: 0, castT: 0, dead: false });
+      .setOrigin(0.5).setDepth(5).setAlpha(0.7);
+    this.enemies.push({
+      obj, label, def, x, y,
+      fireTimer: Phaser.Math.FloatBetween(1.0, 2.2),
+      ultTimer: ulter ? Phaser.Math.FloatBetween(4.5, 7.5) : Infinity,
+      ulter, drift: Phaser.Math.FloatBetween(-1, 1),
+      spawnT: 0, castT: 0, dead: false,
+    });
   }
 
   private enemyFire(e: Enemy): void {
     e.castT = 0.35;
+    audio.cast(e.def.shot.style);
+    this.burst(e.x, e.y, e.def.ring, 8, 1.0);
     const s = e.def.shot;
     if (s.kind === "line") {
       const lead = 0.14;
@@ -239,16 +261,43 @@ export class GameScene extends Phaser.Scene {
       const warn = Phaser.Math.Clamp(s.warn - (this.difficulty - 1) * 0.04, 0.3, s.warn);
       this.telegraphs.push({
         kind: "line", x: e.x, y: e.y, ang, width: s.width, length: s.length, radius: 0,
-        warn, t: 0, dmg: s.dmg, color: s.color, style: s.style, done: false,
+        warn, t: 0, dmg: s.dmg, color: s.color, style: s.style, mega: false, done: false,
       });
     } else {
       const tx = Phaser.Math.Clamp(this.px + Phaser.Math.Between(-30, 30), 40, this.scale.width - 40);
       const ty = Phaser.Math.Clamp(this.py + Phaser.Math.Between(-30, 30), 40, this.scale.height - 40);
-      this.lobs.push({ sx: e.x, sy: e.y, tx, ty, t: 0, dur: s.lob });
+      this.lobs.push({ sx: e.x, sy: e.y, tx, ty, t: 0, dur: s.lob, mega: false });
       this.telegraphs.push({
         kind: "circle", x: tx, y: ty, radius: s.radius, ang: 0, width: 0, length: 0,
-        warn: s.lob, t: 0, dmg: s.dmg, color: s.color, style: s.style, done: false,
+        warn: s.lob, t: 0, dmg: s.dmg, color: s.color, style: s.style, mega: false, done: false,
       });
+    }
+  }
+
+  // Ultik: Lux Final Spark (sugár) és Ziggs Mega Inferno Bomb (nagy bomba)
+  private castUlt(e: Enemy): void {
+    e.castT = 0.6;
+    this.burst(e.x, e.y, e.def.ring, 20, 1.6);
+    this.floatText(e.x, e.y - 46, e.def.key === "lux" ? "Final Spark!" : "Mega Bomb!", css(e.def.ring));
+
+    if (e.def.key === "lux") {
+      const warn = 0.72;
+      const ang = Math.atan2(this.py - e.y, this.px - e.x);
+      this.telegraphs.push({
+        kind: "beam", x: e.x, y: e.y, ang, width: 82, length: 3200, radius: 0,
+        warn, t: 0, dmg: 34, color: 0xfff3a0, style: "luxUlt", mega: true, done: false,
+      });
+      audio.luxCharge(warn);
+    } else {
+      const lob = 1.05;
+      const tx = Phaser.Math.Clamp(this.px, 60, this.scale.width - 60);
+      const ty = Phaser.Math.Clamp(this.py, 60, this.scale.height - 60);
+      this.lobs.push({ sx: e.x, sy: e.y - 140, tx, ty, t: 0, dur: lob, mega: true });
+      this.telegraphs.push({
+        kind: "circle", x: tx, y: ty, radius: 156, ang: 0, width: 0, length: 0,
+        warn: lob, t: 0, dmg: 42, color: 0xff8a3a, style: "ziggsUlt", mega: true, done: false,
+      });
+      audio.ziggsWhistle(lob);
     }
   }
 
@@ -256,8 +305,7 @@ export class GameScene extends Phaser.Scene {
     const img = this.add.image(t.x, t.y, "glow").setDepth(7).setTint(t.color);
     const elong = t.style === "ezreal" || t.style === "ashe";
     const w = t.width;
-    img.setDisplaySize(elong ? w * 2.6 : w * 1.4, w * 1.4);
-    img.setRotation(t.ang);
+    img.setDisplaySize(elong ? w * 2.6 : w * 1.4, w * 1.4).setRotation(t.ang);
     const speed = t.style === "ezreal" ? 1150 : t.style === "ashe" ? 470 : t.style === "ryze" ? 720 : 820;
     this.enemyShots.push({
       obj: img, x: t.x, y: t.y,
@@ -268,19 +316,39 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private explode(x: number, y: number, radius: number, dmg: number): void {
-    this.burst(x, y, 0xff9a4a, 30, 3.8);
-    this.particles.push({ x, y, vx: 0, vy: 0, r: 4, t: 0, dur: 0.38, color: 0xff9a4a, ring: true, maxR: radius });
+  private activateBeam(t: Telegraph): void {
+    this.beams.push({ x: t.x, y: t.y, ang: t.ang, width: t.width, length: t.length, t: 0, dur: 0.3, dmg: t.dmg, color: t.color, damaged: false });
+    this.cameras.main.flash(180, 255, 250, 210);
+    this.cameras.main.shake(150, 0.006);
+    audio.luxBeam();
+    // ragyogó indulási por a forrásnál
+    this.burst(t.x, t.y, 0xffffff, 24, 2.2);
+  }
+
+  private explode(x: number, y: number, radius: number, dmg: number, mega: boolean): void {
+    const color = mega ? 0xff7a2a : 0xff9a4a;
+    this.burst(x, y, color, mega ? 60 : 30, mega ? 5 : 3.8);
+    this.particles.push({ x, y, vx: 0, vy: 0, r: 4, t: 0, dur: mega ? 0.55 : 0.38, color, ring: true, maxR: radius });
+    if (mega) {
+      this.particles.push({ x, y, vx: 0, vy: 0, r: 4, t: 0, dur: 0.7, color: 0xffd08a, ring: true, maxR: radius * 1.4 });
+      this.cameras.main.shake(320, 0.017);
+      this.cameras.main.flash(140, 255, 150, 70);
+      audio.ziggsBoom();
+    } else {
+      this.cameras.main.shake(120, 0.006);
+      audio.impact("ziggs");
+    }
     if (Phaser.Math.Distance.Squared(this.px, this.py, x, y) < (radius + CONFIG.playerRadius) ** 2) this.damage(dmg);
   }
 
-  // ---------------- Sebzés / effektek ----------------
   private damage(amount: number): void {
     if (this.over || this.invuln > 0) return;
     this.hp -= amount;
     this.hitFlash = 0.25;
     this.burst(this.px, this.py, 0xe04a4a, 14, 1.4);
     this.floatText(this.px, this.py - 30, "-" + amount, "#ff6b6b");
+    this.cameras.main.shake(90, 0.005);
+    audio.hurt();
     if (this.hp <= 0) { this.hp = 0; this.gameOver(); }
   }
 
@@ -288,7 +356,7 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = (40 + Math.random() * 200) * scale;
-      this.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: 1.5 + Math.random() * 2, t: 0, dur: 0.3 + Math.random() * 0.4, color, ring: false, maxR: 0 });
+      this.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: 1.5 + Math.random() * 2.5, t: 0, dur: 0.3 + Math.random() * 0.45, color, ring: false, maxR: 0 });
     }
   }
 
@@ -297,10 +365,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private floatText(x: number, y: number, text: string, color: string): void {
-    const t = this.add
-      .text(x, y, text, { fontFamily: "Trebuchet MS, sans-serif", fontSize: "18px", fontStyle: "bold", color })
-      .setOrigin(0.5)
-      .setDepth(9);
+    const t = this.add.text(x, y, text, { fontFamily: "Trebuchet MS, sans-serif", fontSize: "18px", fontStyle: "bold", color }).setOrigin(0.5).setDepth(9);
     this.tweens.add({ targets: t, y: y - 26, alpha: 0, duration: 850, onComplete: () => t.destroy() });
   }
 
@@ -319,6 +384,7 @@ export class GameScene extends Phaser.Scene {
     this.updateSpawns(dt);
     this.updateEnemies(dt);
     this.updateTelegraphs(dt);
+    this.updateBeams(dt);
     this.updateLobs(dt);
     this.updateEnemyShots(dt);
     this.updatePlayerShots(dt);
@@ -377,8 +443,18 @@ export class GameScene extends Phaser.Scene {
       e.y = Phaser.Math.Clamp(e.y, 44, this.scale.height - 44);
       e.obj.setPosition(e.x, e.y);
       e.label.setPosition(e.x, e.y - 40);
-      e.fireTimer -= dt;
-      if (e.fireTimer <= 0) { this.enemyFire(e); e.fireTimer = Phaser.Math.FloatBetween(1.7, 3.1) / this.difficulty; }
+
+      if (e.spawnT >= 1) {
+        e.ultTimer -= dt;
+        if (e.ultTimer <= 0) {
+          this.castUlt(e);
+          e.ultTimer = Phaser.Math.FloatBetween(8, 12) / Math.sqrt(this.difficulty);
+          e.fireTimer = Math.max(e.fireTimer, 1.4);
+        } else {
+          e.fireTimer -= dt;
+          if (e.fireTimer <= 0) { this.enemyFire(e); e.fireTimer = Phaser.Math.FloatBetween(1.7, 3.1) / this.difficulty; }
+        }
+      }
     }
     this.enemies = this.enemies.filter((e) => {
       if (e.dead) { e.obj.destroy(); e.label.destroy(); return false; }
@@ -392,10 +468,27 @@ export class GameScene extends Phaser.Scene {
       if (t.t >= t.warn && !t.done) {
         t.done = true;
         if (t.kind === "line") this.fireLine(t);
-        else this.explode(t.x, t.y, t.radius, t.dmg);
+        else if (t.kind === "beam") this.activateBeam(t);
+        else this.explode(t.x, t.y, t.radius, t.dmg, t.mega);
       }
     }
     this.telegraphs = this.telegraphs.filter((t) => !t.done);
+  }
+
+  private updateBeams(dt: number): void {
+    for (const b of this.beams) {
+      b.t += dt;
+      if (!b.damaged) {
+        const dx = this.px - b.x, dy = this.py - b.y;
+        const along = dx * Math.cos(b.ang) + dy * Math.sin(b.ang);
+        const perp = -dx * Math.sin(b.ang) + dy * Math.cos(b.ang);
+        if (along > -20 && along < b.length && Math.abs(perp) < b.width / 2 + CONFIG.playerRadius) {
+          b.damaged = true;
+          this.damage(b.dmg);
+        }
+      }
+    }
+    this.beams = this.beams.filter((b) => b.t < b.dur);
   }
 
   private updateLobs(dt: number): void {
@@ -410,7 +503,7 @@ export class GameScene extends Phaser.Scene {
       s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
       s.obj.setPosition(s.x, s.y);
       if (Phaser.Math.Distance.Squared(s.x, s.y, this.px, this.py) < (s.r + CONFIG.playerRadius) ** 2) {
-        this.damage(s.dmg); s.dead = true; this.burst(s.x, s.y, s.color, 12, 1.2);
+        this.damage(s.dmg); s.dead = true; this.burst(s.x, s.y, s.color, 12, 1.2); audio.impact(s.style);
       }
       if (s.x < -80 || s.x > this.scale.width + 80 || s.y < -80 || s.y > this.scale.height + 80 || s.life <= 0) s.dead = true;
     }
@@ -439,6 +532,7 @@ export class GameScene extends Phaser.Scene {
           e.dead = true; this.kills++;
           this.burst(e.x, e.y, e.def.ring, 28, 2.2);
           this.floatText(e.x, e.y - 26, "+50", "#0ac8b9");
+          audio.kill();
           s.dead = true; break;
         }
       }
@@ -459,17 +553,14 @@ export class GameScene extends Phaser.Scene {
     this.particles = this.particles.filter((p) => p.t < p.dur);
   }
 
-  // ---------------- Rajz (graphics rétegek) ----------------
+  // ---------------- Rajz ----------------
   private draw(): void {
     const g = this.gfxTele;
     g.clear();
-    // telegraph-ok
     for (const t of this.telegraphs) {
       const k = Phaser.Math.Clamp(t.t / t.warn, 0, 1);
       if (t.kind === "line") {
-        g.save();
-        g.translateCanvas(t.x, t.y);
-        g.rotateCanvas(t.ang);
+        g.save(); g.translateCanvas(t.x, t.y); g.rotateCanvas(t.ang);
         g.fillStyle(t.color, 0.08 + 0.12 * k);
         g.fillRect(0, -t.width / 2, t.length, t.width);
         g.fillStyle(t.color, 0.34 * k);
@@ -477,61 +568,75 @@ export class GameScene extends Phaser.Scene {
         g.lineStyle(2, t.color, 0.5 + 0.4 * k);
         g.strokeRect(0, -t.width / 2, t.length, t.width);
         g.restore();
+      } else if (t.kind === "beam") {
+        // Lux töltés: vékony, egyre fényesebb középvonal + lüktetés
+        g.save(); g.translateCanvas(t.x, t.y); g.rotateCanvas(t.ang);
+        const coreW = 2 + k * (t.width * 0.5);
+        g.fillStyle(0xffffff, 0.3 + 0.6 * k);
+        g.fillRect(0, -coreW / 2, t.length, coreW);
+        g.fillStyle(t.color, 0.12 + 0.25 * k);
+        g.fillRect(0, -t.width / 2, t.length, t.width);
+        g.restore();
       } else {
-        g.lineStyle(3, 0xff8c5a, 0.5 + 0.4 * k);
+        const megaCol = t.mega ? 0xff6a2a : 0xff8c5a;
+        g.lineStyle(t.mega ? 4 : 3, megaCol, 0.5 + 0.4 * k);
         g.strokeCircle(t.x, t.y, t.radius);
-        g.fillStyle(0xff7846, 0.1 + 0.24 * k);
+        g.fillStyle(t.mega ? 0xff5a20 : 0xff7846, 0.1 + 0.24 * k);
         g.fillCircle(t.x, t.y, t.radius * k);
       }
     }
-    // Ziggs pattogó bomba
+
+    // Ziggs bombák íve
     for (const l of this.lobs) {
       const k = Phaser.Math.Clamp(l.t / l.dur, 0, 1);
       const x = l.sx + (l.tx - l.sx) * k;
       const yb = l.sy + (l.ty - l.sy) * k;
-      const hop = Math.abs(Math.sin(k * Math.PI * 2)) * 46 * (1 - k * 0.4);
+      const hop = Math.abs(Math.sin(k * Math.PI * (l.mega ? 1 : 2))) * (l.mega ? 120 : 46) * (1 - k * 0.35);
       const y = yb - hop;
+      const rad = l.mega ? 18 : 10;
       g.fillStyle(0x000000, 0.3);
-      g.fillEllipse(x, yb, 20 * (1 - hop / 120), 8);
-      g.fillStyle(0xff8a3a, 1);
-      g.fillCircle(x, y, 10);
-      g.fillStyle(0xffd08a, 1);
-      g.fillCircle(x, y, 5);
+      g.fillEllipse(x, yb, rad * 2 * (1 - hop / 200), rad * 0.7);
+      g.fillStyle(0xff8a3a, 1); g.fillCircle(x, y, rad);
+      g.fillStyle(0xffd08a, 1); g.fillCircle(x, y, rad * 0.5);
+      if (l.mega) { g.lineStyle(2, 0xffe0a0, 0.8); g.strokeCircle(x, y, rad + 4 + Math.sin(this.elapsed * 20) * 2); }
     }
 
-    // FX réteg: aurák, csóvák, részecskék
+    // FX (normál blend)
     const fx = this.gfxFx;
     fx.clear();
-
-    // gurulás-szellemképek
     for (const gh of this.ghosts) {
       const a = 1 - gh.t / 0.25;
       fx.fillStyle(this.champ.accent, a * 0.35);
       fx.fillCircle(gh.x, gh.y, CONFIG.playerRadius);
     }
-
-    // ellenség cast-villanás + játékos aura
     for (const e of this.enemies) {
-      if (e.castT > 0) { fx.fillStyle(0xffffff, e.castT); fx.fillCircle(e.x, e.y, CONFIG.enemyRadius + 12); }
+      if (e.castT > 0) { fx.fillStyle(0xffffff, Math.min(1, e.castT)); fx.fillCircle(e.x, e.y, CONFIG.enemyRadius + 12); }
     }
     if (this.invuln > 0) { fx.lineStyle(2, 0xffffff, 0.6); fx.strokeCircle(this.px, this.py, CONFIG.playerRadius + 6); }
-
-    // ellenség-lövedékek csóvái
     for (const s of this.enemyShots) this.drawTrail(fx, s);
     for (const s of this.playerShots) this.drawTrail(fx, s);
-
-    // részecskék
     for (const p of this.particles) {
       const a = 1 - p.t / p.dur;
-      if (p.ring) { fx.lineStyle(2, p.color, a); fx.strokeCircle(p.x, p.y, p.r); }
+      if (p.ring) { fx.lineStyle(p.maxR > 120 ? 4 : 2, p.color, a); fx.strokeCircle(p.x, p.y, p.r); }
       else { fx.fillStyle(p.color, a); fx.fillCircle(p.x, p.y, p.r); }
     }
-
-    // facing-jelző
     fx.fillStyle(0x0ac8b9, 0.9);
-    const fx1 = this.px + Math.cos(this.facing) * (CONFIG.playerRadius + 4);
-    const fy1 = this.py + Math.sin(this.facing) * (CONFIG.playerRadius + 4);
-    fx.fillCircle(fx1, fy1, 4);
+    fx.fillCircle(this.px + Math.cos(this.facing) * (CONFIG.playerRadius + 4), this.py + Math.sin(this.facing) * (CONFIG.playerRadius + 4), 4);
+
+    // Additív réteg: Lux sugár + fényes maghatások
+    const add = this.gfxAdd;
+    add.clear();
+    for (const b of this.beams) {
+      const life = 1 - b.t / b.dur;
+      add.save(); add.translateCanvas(b.x, b.y); add.rotateCanvas(b.ang);
+      add.fillStyle(b.color, 0.5 * life);
+      add.fillRect(0, -b.width / 2, b.length, b.width);
+      add.fillStyle(0xfff6c0, 0.7 * life);
+      add.fillRect(0, -b.width * 0.28, b.length, b.width * 0.56);
+      add.fillStyle(0xffffff, 0.95 * life);
+      add.fillRect(0, -b.width * 0.1, b.length, b.width * 0.2);
+      add.restore();
+    }
   }
 
   private drawTrail(fx: Phaser.GameObjects.Graphics, s: Shot): void {
@@ -548,6 +653,8 @@ export class GameScene extends Phaser.Scene {
   // ---------------- Game over ----------------
   private gameOver(): void {
     this.over = true;
+    audio.death();
+    this.cameras.main.shake(300, 0.012);
     const best = this.registry.get("best") as number;
     if (this.score > best) { this.registry.set("best", this.score); localStorage.setItem("riftdodge_best", String(this.score)); }
 
@@ -563,9 +670,7 @@ export class GameScene extends Phaser.Scene {
     const stats = `Pontszám  ${this.score}      Legjobb  ${this.registry.get("best")}      Kilövések  ${this.kills}`;
     panel.add(this.add.text(0, -40, stats, { fontFamily: "Trebuchet MS, sans-serif", fontSize: "15px", color: css(0xc8aa6e) }).setOrigin(0.5));
 
-    const retry = button(this, cx, H / 2 + 60, "ÚJRA (ugyanaz a hős)", () => { dim.destroy(); panel.destroy(); this.scene.restart(); }, { width: 300 });
-    retry.setDepth(22);
-    const change = button(this, cx, H / 2 + 122, "HŐSVÁLTÁS", () => { dim.destroy(); panel.destroy(); this.scene.start("Select"); }, { ghost: true, width: 300 });
-    change.setDepth(22);
+    button(this, cx, H / 2 + 60, "ÚJRA (ugyanaz a hős)", () => { dim.destroy(); panel.destroy(); this.scene.restart(); }, { width: 300 }).setDepth(22);
+    button(this, cx, H / 2 + 122, "HŐSVÁLTÁS", () => { dim.destroy(); panel.destroy(); this.scene.start("Select"); }, { ghost: true, width: 300 }).setDepth(22);
   }
 }

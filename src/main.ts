@@ -4,6 +4,9 @@ import { MenuScene } from "./scenes/MenuScene";
 import { SelectScene } from "./scenes/SelectScene";
 import { GameScene } from "./scenes/GameScene";
 import { UIScene } from "./scenes/UIScene";
+import { LobbyScene } from "./scenes/LobbyScene";
+import { ArenaScene } from "./scenes/ArenaScene";
+import { ArenaUIScene } from "./scenes/ArenaUIScene";
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -20,7 +23,7 @@ const config: Phaser.Types.Core.GameConfig = {
     arcade: { gravity: { x: 0, y: 0 }, debug: false },
   },
   render: { antialias: true, roundPixels: false },
-  scene: [BootScene, MenuScene, SelectScene, GameScene, UIScene],
+  scene: [BootScene, MenuScene, SelectScene, GameScene, UIScene, LobbyScene, ArenaScene, ArenaUIScene],
 };
 
 // eslint-disable-next-line no-new

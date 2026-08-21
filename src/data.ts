@@ -117,3 +117,47 @@ export const CONFIG = {
   basicRange: 760,
   enemyRadius: 26,
 };
+
+/* =========================================================================
+   Többjátékos (aréna) balansz + power-up definíciók
+   ========================================================================= */
+
+export type PowerKind = "shield" | "invuln" | "upgrade";
+
+export interface PowerDef {
+  kind: PowerKind;
+  name: string;
+  glyph: string;   // token felirat
+  color: number;   // token / aura szín
+  desc: string;
+}
+
+export const POWERUPS: Record<PowerKind, PowerDef> = {
+  shield: {
+    kind: "shield", name: "Pajzs", glyph: "⛨", color: 0x4aa8e0,
+    desc: "Elnyel 60 sebzést, mielőtt a HP-t érné.",
+  },
+  invuln: {
+    kind: "invuln", name: "Sebezhetetlenség", glyph: "★", color: 0xffe07a,
+    desc: "5 másodperc teljes sérthetetlenség.",
+  },
+  upgrade: {
+    kind: "upgrade", name: "Lövés-fejlesztés", glyph: "⚡", color: 0x0ac8b9,
+    desc: "Gyorsabb, erősebb, több lövedék — halmozódik.",
+  },
+};
+
+export const POWER_ORDER: PowerKind[] = ["shield", "invuln", "upgrade"];
+
+export const ARENA = {
+  shieldAmount: 60,
+  invulnDuration: 5.0,
+  upgradeDuration: 14.0,
+  upgradeMaxLevel: 4,
+  autoFireCd: 0.42,        // 1. szintű tűzgyorsaság (mp)
+  respawnDelay: 3.0,
+  powerupInterval: 7.0,    // host ennyinként dob egy power-upot
+  powerupMax: 5,
+  powerRadius: 18,
+  pvpBasicDmg: 12,         // játékos alaplövés sebzése játékos ellen
+};

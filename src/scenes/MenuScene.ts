@@ -8,6 +8,11 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    // meghívó linkkel érkezőt egyből a lobbiba visszük
+    if (new URLSearchParams(location.search).get("room")) {
+      this.scene.start("Lobby");
+      return;
+    }
     new WinterBackground(this);
     const { width: W, height: H } = this.scale;
     const cx = W / 2;
@@ -32,12 +37,12 @@ export class MenuScene extends Phaser.Scene {
 
     const controls = [
       "Jobb klikk — mozgás a kattintott pontra",
-      "Bal klikk — alaptámadás a kurzor felé",
-      "Hős-skill — Ezreal: E · Vayne: Q",
-      "F — Flash (villanás)",
+      "Bal klikk — alaptámadás a kurzor felé (szóló)",
+      "Hős-skill — Ezreal: E · Vayne: Q · F — Flash",
+      "Többjátékos: automata lövés, power-upok, PvP",
     ];
     this.add
-      .text(cx, H * 0.5, controls.join("\n"), {
+      .text(cx, H * 0.48, controls.join("\n"), {
         fontFamily: "Trebuchet MS, sans-serif",
         fontSize: "16px",
         color: "#c9d2da",
@@ -46,7 +51,8 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    button(this, cx, H * 0.72, "HŐSVÁLASZTÁS", () => this.scene.start("Select"));
+    button(this, cx, H * 0.68, "TÖBBJÁTÉKOS — LOBBI", () => this.scene.start("Lobby"), { width: 320 });
+    button(this, cx, H * 0.68 + 62, "SZÓLÓ — HŐSVÁLASZTÁS", () => this.scene.start("Select"), { ghost: true, width: 320 });
 
     if (!this.registry.get("assetsReal")) {
       this.add

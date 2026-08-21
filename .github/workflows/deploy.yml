@@ -8,6 +8,7 @@ on:
     branches:
       - claude/browser-lol-game-ideas-csgj7i
       - main
+      - dev
   workflow_dispatch:
 
 permissions:

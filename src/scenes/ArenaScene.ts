@@ -265,10 +265,8 @@ export class ArenaScene extends Phaser.Scene {
   private autoFire(dt: number): void {
     this.fireCd = Math.max(0, this.fireCd - dt);
     if (this.fireCd > 0) return;
-    const target = this.nearestFoe(950);
-    if (!target) return;
-    const ang = Math.atan2(target.y - this.py, target.x - this.px);
-    this.facing = ang;
+    // a kurzor irányába tüzelünk — a célzás a játékoson múlik
+    const ang = this.facing;
     const L = this.upgLevel;
     const cd = ARENA.autoFireCd / (1 + 0.35 * L);
     const dmg = ARENA.pvpBasicDmg * (1 + 0.4 * L);
@@ -301,21 +299,6 @@ export class ArenaScene extends Phaser.Scene {
       r: p.r || 9, dmg: p.dmg, color: p.color, style: p.style || "basic",
       traveled: 0, range: p.range || 800, life: 3, ownerId: from, homing: false, targetNpc: null, trail: [], dead: false,
     });
-  }
-
-  private nearestFoe(maxDist: number): { x: number; y: number } | null {
-    let best: { x: number; y: number } | null = null, bd = maxDist * maxDist;
-    for (const r of this.remotes.values()) {
-      if (!r.alive) continue;
-      const d = Phaser.Math.Distance.Squared(this.px, this.py, r.x, r.y);
-      if (d < bd) { bd = d; best = { x: r.x, y: r.y }; }
-    }
-    for (const n of this.npcs.values()) {
-      if (n.dead || n.phase < 0.6) continue;
-      const d = Phaser.Math.Distance.Squared(this.px, this.py, n.x, n.y);
-      if (d < bd) { bd = d; best = { x: n.x, y: n.y }; }
-    }
-    return best;
   }
 
   // ---------------- Fő ciklus ----------------
@@ -382,6 +365,9 @@ export class ArenaScene extends Phaser.Scene {
     }
     this.px = Phaser.Math.Clamp(this.px, CONFIG.playerRadius, this.scale.width - CONFIG.playerRadius);
     this.py = Phaser.Math.Clamp(this.py, CONFIG.playerRadius, this.scale.height - CONFIG.playerRadius);
+    // a célzás mindig a kurzor felé néz (az automata lövés is erre megy)
+    const aim = this.input.activePointer;
+    this.facing = Math.atan2(aim.worldY - this.py, aim.worldX - this.px);
     this.hero.setPosition(this.px, this.py).setTint(this.hitFlash > 0 ? 0xff8888 : 0xffffff);
     this.nameTag.setPosition(this.px, this.py - 34);
 
